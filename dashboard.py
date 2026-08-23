@@ -12,6 +12,30 @@ import time
 st.set_page_config(page_title="Controle Financeiro Pro", layout="wide")
 
 # ==========================================
+# CONTROLE DE AUTENTICAÇÃO (LOGIN)
+# ==========================================
+def check_password():
+    def password_entered():
+        if st.session_state["password"] == st.secrets["senha_app"]:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # Remove a senha da memória por segurança
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        st.text_input("🔒 Digite a senha de acesso:", type="password", on_change=password_entered, key="password")
+        return False
+    elif not st.session_state["password_correct"]:
+        st.text_input("🔒 Digite a senha de acesso:", type="password", on_change=password_entered, key="password")
+        st.error("😕 Senha incorreta. Tente novamente.")
+        return False
+    else:
+        return True
+
+if not check_password():
+    st.stop()
+
+# ==========================================
 # CSS GLOBAL (DESKTOP E MOBILE RESPONSIVO)
 # ==========================================
 st.markdown("""
