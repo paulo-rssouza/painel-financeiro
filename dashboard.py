@@ -12,11 +12,10 @@ import time
 st.set_page_config(page_title="Controle Financeiro Pro", layout="wide")
 
 # ==========================================
-# CSS GLOBAL
+# CSS GLOBAL (DESKTOP E MOBILE RESPONSIVO)
 # ==========================================
 st.markdown("""
     <style>
-    /* Estilo padrão para Notebook / Desktop */
     div[data-testid="stDataFrame"] td, 
     div[data-testid="stDataFrame"] th {
         white-space: nowrap !important;
@@ -24,7 +23,6 @@ st.markdown("""
         padding-right: 14px !important;
     }
 
-    /* Ajustes automáticos apenas para Celulares (telas menores que 768px) */
     @media (max-width: 768px) {
         div[data-testid="stDataFrame"] {
             overflow-x: auto !important;
@@ -34,18 +32,13 @@ st.markdown("""
             padding-right: 1rem !important;
             padding-top: 2rem !important;
         }
-        h1 {
-            font-size: 1.8rem !important;
-        }
-        h2 {
-            font-size: 1.4rem !important;
-        }
-        h3 {
-            font-size: 1.2rem !important;
-        }
+        h1 { font-size: 1.8rem !important; }
+        h2 { font-size: 1.4rem !important; }
+        h3 { font-size: 1.2rem !important; }
     }
     </style>
 """, unsafe_allow_html=True)
+
 # ==========================================
 # CONEXÃO E FUNÇÕES DE APOIO
 # ==========================================
@@ -509,7 +502,7 @@ if not df_raw_geral.empty:
 
             st.divider()
             
-            st.markdown("💡 *Filtre a tabela abaixo para encontrar e editar um gasto específico ou limpe os filtros e role até o final para colar dados em massa.*")
+            st.markdown("💡 *Filtre a tabela abaixo para encontrar e editar um gasto específico ou limpe os filtros e role até o final para colar dados em massa. **Esta tabela altera apenas a aba 'Despesas' no seu Google Sheets e é totalmente independente das outras funções.***")
             
             if not df_desp_bruto.empty:
                 col_f_desp1, col_f_desp2, col_f_desp3 = st.columns(3)
@@ -525,7 +518,7 @@ if not df_raw_geral.empty:
                     f_desp_mes = st.selectbox("📅 Vencimento:", lista_mes_bruto, key="f_desp_mes")
                 
                 with col_f_desp3:
-                    f_desp_desc = st.text_input("🔍 Descrição contém:", key="f_desp_desc")
+                    f_desp_desc = st.text_input("🔍 Descrição contém (vazio = todas):", key="f_desp_desc")
                     
                 mask_desp = pd.Series(True, index=df_desp_bruto.index)
                 if f_desp_cartao != "Todos":
@@ -547,7 +540,7 @@ if not df_raw_geral.empty:
                 st.data_editor(
                     df_display_desp, 
                     num_rows="dynamic", 
-                    use_container_width=True, 
+                    width='stretch', 
                     hide_index=True, 
                     key="editor_despesas_brutas"
                 )
@@ -559,12 +552,12 @@ if not df_raw_geral.empty:
 
                 confirm_del = True
                 if num_deleted > 5:
-                    st.warning(f"🚨 ALERTA: Você marcou {num_deleted} linhas para exclusão.")
+                    st.warning(f"🚨 ALERTA CRÍTICO: Você marcou {num_deleted} linhas para exclusão. Isso apagará o histórico em massa!")
                     confirm_del = st.checkbox("Confirmo a exclusão destas linhas", key="confirm_del_bruto")
 
                 if st.button("💾 Salvar Lançamentos e Edições na aba 'Despesas'", type="primary"):
                     if num_deleted > 5 and not confirm_del:
-                        st.error("🛑 Ação bloqueada: Confirme a exclusão.")
+                        st.error("🛑 Ação bloqueada: Por segurança, marque a caixa de confirmação para autorizar exclusões em massa.")
                         st.stop()
                         
                     df_final_desp = df_desp_bruto.copy()
@@ -575,7 +568,7 @@ if not df_raw_geral.empty:
                             orig_idx = original_indices_desp[row_pos_int]
                             for col_name, new_val in col_changes.items():
                                 df_final_desp.at[orig_idx, col_name] = new_val
-                            
+                                
                     deleted_positions = changes.get("deleted_rows", [])
                     if deleted_positions:
                         indices_to_drop = [original_indices_desp[int(pos)] for pos in deleted_positions if int(pos) < len(original_indices_desp)]
@@ -590,16 +583,55 @@ if not df_raw_geral.empty:
                         df_new_desp = df_new_desp[df_final_desp.columns]
                         df_final_desp = pd.concat([df_final_desp, df_new_desp], ignore_index=True)
                         
-                    if salvar_tabela_google(df_final_desp, "Despesas"):
-                        st.success("✅ Aba 'Despesas' atualizada com sucesso!")
-                        carregar_despesas_brutas.clear()
-                        time.sleep(2.0)
-                        st.rerun()
+                    date_errors = []
+                    date_regex = re.compile(r'^\d{2}/\d{2}/\d{4}$')
+                    for col in ["Data", "Vencimento"]:
+                        if col in df_final_desp.columns:
+                            invalid_mask = df_final_desp[col].astype(str).str.strip().apply(lambda x: x != "" and not bool(date_regex.match(x)))
+                            if invalid_mask.any():
+                                date_errors.extend(df_final_desp[invalid_mask][col].unique().tolist())
+                    
+                    if date_errors:
+                        st.error(f"🛑 Erro de Formatação: Encontramos datas fora do padrão DD/MM/AAAA (ex: {', '.join(date_errors[:3])}). Por favor, corrija a tabela e salve novamente.")
+                        st.stop()
+                        
+                    existing_cards = [str(c).strip() for c in df_desp_bruto["Cartão"].dropna().unique() if str(c).strip()]
+                    current_cards = [str(c).strip() for c in df_final_desp["Cartão"].dropna().unique() if str(c).strip()]
+                    new_cards = [c for c in current_cards if c not in existing_cards and c != ""]
+                    
+                    dupe_warn = False
+                    if num_added > 0:
+                        df_new_only = pd.DataFrame(added_rows)
+                        if all(c in df_new_only.columns for c in ["Vencimento", "Cartão", "Descrição"]):
+                            for _, r in df_new_only.iterrows():
+                                match = df_desp_bruto[
+                                    (df_desp_bruto["Vencimento"] == r.get("Vencimento", "")) &
+                                    (df_desp_bruto["Cartão"] == r.get("Cartão", "")) &
+                                    (df_desp_bruto["Descrição"] == r.get("Descrição", ""))
+                                ]
+                                if not match.empty:
+                                    dupe_warn = True
+                                    break
+                                    
+                    with st.spinner("Sincronizando banco de dados..."):
+                        if salvar_tabela_google(df_final_desp, "Despesas"):
+                            st.success(f"✅ Lançamentos processados e aba 'Despesas' atualizada com sucesso! ({num_added} incluídos, {num_edited} editados, {num_deleted} excluídos).")
+                            
+                            if new_cards:
+                                st.info(f"⚠️ Atenção: Identificamos cartões que não existiam no histórico: {', '.join(new_cards)}.")
+                            if dupe_warn:
+                                st.warning("⚠️ Nota: Pelo menos um dos lançamentos adicionados parece já existir na tabela (Mesma Data, Cartão e Descrição).")
+                            
+                            carregar_despesas_brutas.clear()
+                            time.sleep(2.0)
+                            st.rerun()
             else:
                 st.warning("A aba 'Despesas' parece estar vazia no Google Sheets.")
 
         with tab1:
             st.markdown("### Descoberta Automática de Recorrentes")
+            st.markdown("💡 *Todas as suas avaliações vindas do motor estão aqui. Alertas e pendências aparecem no topo para fácil auditoria.*")
+            
             df_rec_display_float = df_rec_display.copy()
             
             if not df_rec_display_float.empty:
@@ -609,46 +641,237 @@ if not df_raw_geral.empty:
                 df_rec_display_float["Motivo do Alerta"] = ""
                 df_rec_display_float["Mês da Avaliação"] = ""
                 df_rec_display_float["Novo Valor"] = ""
+                
+                if not df_base.empty:
+                    df_temp_base = df_base[(df_base["Origem_Aba"] == "Cartoes") & (df_base["Tipo_Compra"] == "À Vista / Mês")].copy()
+                    
+                    if "Data" in df_temp_base.columns:
+                        df_temp_base = df_temp_base[df_temp_base["Data"].astype(str).str.strip() != ""]
+                    
+                    if not df_temp_base.empty:
+                        df_temp_base["Cartao_Norm"] = df_temp_base["Cartão"].apply(lambda c: re.sub(r'[^a-z0-9]', '', str(c).lower()))
+                        df_temp_base["Desc_Norm"] = df_temp_base["Descrição"].apply(lambda d: re.sub(r'[^a-z0-9]', '', str(d).lower()))
+                        df_temp_base["Valor_Norm"] = df_temp_base["Valor (R$)"].apply(lambda v: f"{parse_float(v):.2f}")
+                        
+                        max_mes_por_cartao = {}
+                        for c_norm in df_temp_base["Cartao_Norm"].unique():
+                            df_c_vista = df_temp_base[df_temp_base["Cartao_Norm"] == c_norm]
+                            if not df_c_vista.empty:
+                                max_mes_por_cartao[c_norm] = df_c_vista["Sort_Data"].max()
+                        
+                        chaves_existentes = set()
+                        if not df_rec_display_float.empty:
+                            chaves_existentes = set(df_rec_display_float.apply(lambda r: normalizar_chave(r.get("Cartão", ""), r.get("Descrição", ""), r.get("Valor (R$)")), axis=1))
+
+                        novas_recorrentes = []
+                        for c_norm, max_mes in max_mes_por_cartao.items():
+                            if not max_mes: continue
+                            try:
+                                y, m = map(int, max_mes.split('-'))
+                                meses_esperados = [max_mes]
+                                for _ in range(2):
+                                    m -= 1
+                                    if m == 0: m = 12; y -= 1
+                                    meses_esperados.append(f"{y}-{m:02d}")
+                                
+                                df_cartao_meses = df_temp_base[(df_temp_base["Cartao_Norm"] == c_norm) & (df_temp_base["Sort_Data"].isin(meses_esperados))]
+                                agrupado = df_cartao_meses.groupby(["Desc_Norm", "Valor_Norm"])["Sort_Data"].nunique().reset_index()
+                                candidatas = agrupado[agrupado["Sort_Data"] == len(meses_esperados)]
+
+                                for _, cand in candidatas.iterrows():
+                                    d_norm_cand = cand["Desc_Norm"]
+                                    v_norm_cand = cand["Valor_Norm"]
+                                    
+                                    orig_rows = df_cartao_meses[(df_cartao_meses["Desc_Norm"] == d_norm_cand) & (df_cartao_meses["Valor_Norm"] == v_norm_cand)]
+                                    if orig_rows.empty: continue
+                                    
+                                    orig_row = orig_rows.iloc[0]
+                                    k_full = normalizar_chave(orig_row["Cartão"], orig_row["Descrição"], orig_row["Valor (R$)"])
+
+                                    if k_full not in chaves_existentes:
+                                        chaves_existentes.add(k_full) 
+                                        v_str = ", ".join(sorted([pd.to_datetime(m + "-01").strftime("%m/%Y") for m in meses_esperados], reverse=True))
+                                        novas_recorrentes.append({
+                                            "Cartão": orig_row["Cartão"], "Descrição": orig_row["Descrição"], "Valor (R$)": parse_float(orig_row["Valor (R$)"]),
+                                            "Vencimentos Encontrados": v_str, "Status": "⏳ Pendente",
+                                            "Motivo do Alerta": "🌟 Nova Assinatura", "Mês da Avaliação": "", "Novo Valor": "-"
+                                        })
+                            except: pass
+
+                        if novas_recorrentes:
+                            df_novas = pd.DataFrame(novas_recorrentes)
+                            df_rec_display_float = pd.concat([df_novas, df_rec_display_float], ignore_index=True)
+
+                        df_rec_display_float["Cartao_Norm"] = df_rec_display_float["Cartão"].apply(lambda c: re.sub(r'[^a-z0-9]', '', str(c).lower()))
+                        df_rec_display_float["Desc_Norm"] = df_rec_display_float["Descrição"].apply(lambda d: re.sub(r'[^a-z0-9]', '', str(d).lower()))
+
+                        for (c_norm, d_norm), group_regras in df_rec_display_float.groupby(["Cartao_Norm", "Desc_Norm"]):
+                            mask_audit = (~group_regras["Status"].str.lower().str.contains("ignorar")) & (~group_regras["Motivo do Alerta"].str.contains("🌟", na=False))
+                            regras_audit = group_regras[mask_audit]
+                            
+                            if regras_audit.empty: continue
+                            
+                            ultimo_sort_cartao = max_mes_por_cartao.get(c_norm)
+                            if not ultimo_sort_cartao: continue
+                            
+                            try: mes_ano_str = pd.to_datetime(ultimo_sort_cartao + "-01").strftime("%m/%Y")
+                            except: mes_ano_str = ultimo_sort_cartao
+                            
+                            df_fatura_loja = df_temp_base[
+                                (df_temp_base["Cartao_Norm"] == c_norm) & 
+                                (df_temp_base["Desc_Norm"] == d_norm) & 
+                                (df_temp_base["Sort_Data"] == ultimo_sort_cartao)
+                            ]
+                            
+                            valores_disponiveis = [parse_float(v) for v in df_fatura_loja["Valor (R$)"].tolist()]
+                            regras_sem_match = []
+                            
+                            for idx, row in regras_audit.iterrows():
+                                val_regra = parse_float(row["Valor (R$)"])
+                                matched = False
+                                for i, v_fat in enumerate(valores_disponiveis):
+                                    if abs(v_fat - val_regra) <= 0.02:
+                                        valores_disponiveis.pop(i)
+                                        matched = True
+                                        break
+                                
+                                if matched:
+                                    df_rec_display_float.at[idx, "Motivo do Alerta"] = ""
+                                    df_rec_display_float.at[idx, "Mês da Avaliação"] = ""
+                                    df_rec_display_float.at[idx, "Novo Valor"] = ""
+                                else:
+                                    regras_sem_match.append(idx)
+                                    
+                            for idx in regras_sem_match:
+                                df_rec_display_float.at[idx, "Mês da Avaliação"] = mes_ano_str
+                                if len(valores_disponiveis) > 0:
+                                    df_rec_display_float.at[idx, "Motivo do Alerta"] = "⚠️ Mudou de Valor"
+                                    valores_unicos = list(set([f"R$ {v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") for v in valores_disponiveis]))
+                                    df_rec_display_float.at[idx, "Novo Valor"] = " / ".join(valores_unicos)
+                                else:
+                                    df_rec_display_float.at[idx, "Motivo do Alerta"] = "🛑 Sumiu / Cancelada"
+                                    df_rec_display_float.at[idx, "Novo Valor"] = "-"
+
+                        df_rec_display_float = df_rec_display_float.drop(columns=["Cartao_Norm", "Desc_Norm"])
+            
+            df_display_final = df_rec_display_float.copy()
+            if not df_display_final.empty:
+                if (df_display_final["Motivo do Alerta"].str.strip() != "").any():
+                    st.warning("⚠️ **ALERTA DE RECORRÊNCIA:** Algumas despesas aprovadas **mudaram de valor ou sumiram da última fatura do cartão**. Elas estão destacadas no topo da lista.")
+                
+                def calc_peso_ordem(r):
+                    m = str(r.get("Motivo do Alerta", "")).strip()
+                    s = str(r.get("Status", "")).lower()
+                    if m != "": return 0  
+                    if "pendente" in s: return 1 
+                    return 2
+                
+                df_display_final["_peso_ordem"] = df_display_final.apply(calc_peso_ordem, axis=1)
+                df_display_final = df_display_final.sort_values(by=["_peso_ordem", "Cartão", "Descrição"]).drop(columns=["_peso_ordem"])
+                
+                col_order = ["Cartão", "Descrição", "Valor (R$)", "Novo Valor", "Mês da Avaliação", "Motivo do Alerta", "Status", "Vencimentos Encontrados"]
+                for col in col_order:
+                    if col not in df_display_final.columns:
+                        df_display_final[col] = ""
+                disp_cols = [c for c in col_order if c in df_display_final.columns]
+                df_display_final = df_display_final[disp_cols]
+
+            df_display_final = df_display_final.reset_index(drop=True)
 
             df_editado_rec = st.data_editor(
-                df_rec_display_float, num_rows="dynamic", use_container_width=True, hide_index=True, key="editor_recorrentes",
+                df_display_final, num_rows="dynamic", width='stretch', hide_index=True, key="editor_recorrentes",
                 column_config={
                     "Status": st.column_config.SelectboxColumn("Decisão", options=["⏳ Pendente", "✅ Aprovado", "❌ Ignorar"], required=True), 
                     "Motivo do Alerta": st.column_config.TextColumn("Motivo do Alerta", disabled=True),
+                    "Mês da Avaliação": st.column_config.TextColumn("Mês da Avaliação", disabled=True),
+                    "Novo Valor": st.column_config.TextColumn("Novo Valor", disabled=True),
+                    "Vencimentos Encontrados": st.column_config.TextColumn("Vencimentos Anteriores", disabled=True),
+                    "Descrição": st.column_config.TextColumn("Descrição", width="large"),
                     "Valor (R$)": st.column_config.NumberColumn("Valor (R$)", format="R$ %.2f")
                 }
             )
             
             if st.button("💾 Salvar TODAS as Decisões"):
-                if salvar_tabela_google(df_editado_rec, "Avaliar Recorrentes"):
+                df_rec_total["Chave_Temp"] = df_rec_total.apply(lambda r: normalizar_chave(r.get("Cartão", ""), r.get("Descrição", ""), r.get("Valor (R$)", "")), axis=1)
+                
+                if not df_editado_rec.empty:
+                    for _, row_ed in df_editado_rec.iterrows():
+                        chave_ed = normalizar_chave(row_ed.get("Cartão", ""), row_ed.get("Descrição", ""), row_ed.get("Valor (R$)", ""))
+                        status_ed = row_ed.get("Status")
+                        motivo_ed = row_ed.get("Motivo do Alerta", "")
+                        
+                        if status_ed in ["✅ Aprovado", "❌ Ignorar"]:
+                            motivo_ed = ""
+                            
+                        mask = df_rec_total["Chave_Temp"] == chave_ed
+                        
+                        if not df_rec_total[mask].empty:
+                            df_rec_total.loc[mask, "Status"] = status_ed
+                            df_rec_total.loc[mask, "Motivo do Alerta"] = motivo_ed
+                        else:
+                            novo_dict = row_ed.to_dict()
+                            novo_dict["Valor (R$)"] = str(novo_dict.get("Valor (R$)", ""))
+                            novo_dict["Status"] = status_ed
+                            novo_dict["Motivo do Alerta"] = motivo_ed
+                            
+                            valid_cols = ["Cartão", "Descrição", "Valor (R$)", "Vencimentos Encontrados", "Status", "Motivo do Alerta"]
+                            novo_dict = {k: v for k, v in novo_dict.items() if k in valid_cols}
+                            
+                            novo_registro = pd.DataFrame([novo_dict])
+                            df_rec_total = pd.concat([df_rec_total, novo_registro], ignore_index=True)
+                
+                if "Chave_Temp" in df_rec_total.columns:
+                    df_rec_total = df_rec_total.drop(columns=["Chave_Temp"])
+                    
+                if salvar_tabela_google(df_rec_total, "Avaliar Recorrentes"):
                     st.success("Salvo com sucesso!")
                     carregar_dados.clear()
                     st.rerun()
 
         with tab2:
             st.markdown("### Gerenciar Despesas Fixas & Provisões")
-            df_editado_fixas = st.data_editor(df_fixas_raw, num_rows="dynamic", use_container_width=True, hide_index=True, key="editor_fixas")
-            if st.button("💾 Salvar Alterações nas Fixas"):
+            df_editado_fixas = st.data_editor(
+                df_fixas_raw, num_rows="dynamic", width='stretch', hide_index=True, key="editor_fixas",
+                column_config={"Descrição": st.column_config.TextColumn("Descrição", width="large")}
+            )
+            if st.button("💾 Salvar Alterações nas Fixas/Provisões"):
                 if salvar_tabela_google(df_editado_fixas, "Fixas"): st.success("Salvo!"); carregar_dados.clear(); st.rerun()
 
         with tab3:
-            st.markdown("### Histórico de Rendas Fixas")
-            df_editado_salarios = st.data_editor(df_salarios_raw, num_rows="dynamic", use_container_width=True, hide_index=True, key="editor_salarios")
+            st.markdown("### Histórico de Rendas Fixas (Salários, Aluguéis, etc)")
+            df_editado_salarios = st.data_editor(
+                df_salarios_raw, num_rows="dynamic", width='stretch', hide_index=True, key="editor_salarios",
+                column_config={"Grupo": st.column_config.TextColumn("Grupo (Ex: Dia 10 ou Dia 25)")}
+            )
             if st.button("💾 Salvar Histórico de Rendas"):
                 if salvar_tabela_google(df_editado_salarios, "Receitas_Historico"): st.success("Atualizado!"); carregar_dados.clear(); st.rerun()
 
         with tab4:
-            st.markdown("### Histórico de Dinheiro Extra")
-            df_editado_extras = st.data_editor(df_extras_raw, num_rows="dynamic", use_container_width=True, hide_index=True, key="editor_extras")
+            st.markdown("### Histórico de Dinheiro Extra (Bônus, Vendas, etc)")
+            st.markdown("💡 *Para registrar transferência da Amanda, escreva **'Pix Amanda'** na Descrição.*")
+            df_editado_extras = st.data_editor(
+                df_extras_raw, num_rows="dynamic", width='stretch', hide_index=True, key="editor_extras",
+                column_config={"Grupo": st.column_config.TextColumn("Grupo (Ex: Dia 10 ou Dia 25)"), "Sort_Data": st.column_config.TextColumn("Filtro (Automático)", disabled=True), "Descrição": st.column_config.TextColumn("Descrição", width="large")}
+            )
             if st.button("💾 Salvar Histórico de Extras"):
-                if salvar_tabela_google(df_editado_extras, "Receitas_Extra"): st.success("Salvo!"); carregar_dados.clear(); st.rerun()
+                col_ma = "Mes_Ano" if "Mes_Ano" in df_extras_raw.columns else "Mês_Ano" if "Mês_Ano" in df_extras_raw.columns else None
+                if col_ma: df_extras_raw["Sort_Data"] = df_extras_raw[col_ma].apply(lambda ma: pd.to_datetime(ma, format="%m/%Y").strftime("%Y-%m") if pd.notna(ma) else "")
+                if salvar_tabela_google(df_extras_raw, "Receitas_Extra"): st.success("Salvo!"); carregar_dados.clear(); st.rerun()
                 
         with tab5:
-            st.markdown("### 🔀 Controle de Categorias")
-            df_editado_reclass = st.data_editor(df_reclass_raw, num_rows="dynamic", use_container_width=True, hide_index=True, key="editor_reclass")
+            st.markdown("### 🔀 Controle de Categorias (Crie, Edite ou Apague)")
+            st.markdown("Aqui estão **todas** as regras do painel. Quer que uma palavra vá para outra categoria? Basta adicionar a palavra (separada por vírgula) na linha da categoria desejada. Quer criar uma nova? Preencha uma nova linha em branco no final da tabela!")
+            
+            df_editado_reclass = st.data_editor(
+                df_reclass_raw, num_rows="dynamic", width='stretch', hide_index=True, key="editor_reclass",
+                column_config={
+                    "Palavras-chave (separadas por vírgula)": st.column_config.TextColumn("Palavras-chave (separadas por vírgula)", width="large", required=True),
+                    "Categoria": st.column_config.TextColumn("Nome da Categoria", width="medium", required=True)
+                }
+            )
             if st.button("💾 Salvar Dicionário de Categorias"):
                 if salvar_tabela_google(df_editado_reclass, "Reclassificacao"): 
-                    st.success("Regras salvas!")
+                    st.success("Regras salvas e aplicadas a todo o histórico!")
                     carregar_dados.clear()
                     preparar_base.clear()
                     st.rerun()
@@ -660,9 +883,10 @@ if not df_raw_geral.empty:
     mes_atual_nome = meses_pt[datetime.now().month]
 
     # ==========================================
-    # 1. VISÃO GERAL
+    # 1. VISÃO GERAL (Cached Table)
     # ==========================================
     st.subheader("🗓️ 1. Visão Geral: Vencimentos, Receitas e Saldo")
+    
     tabela_visual_geral = gerar_tabela_visao_geral(df_base, df_salarios, df_extras, ano_atual, mes_atual_nome)
     
     def colorir_negativos_texto(val):
@@ -673,7 +897,7 @@ if not df_raw_geral.empty:
         cols_totais = [col for col in tabela_visual_geral.columns if col[2] == 'Total Mensal']
         st.dataframe(
             tabela_visual_geral.style.apply(destacar_mes, axis=0).set_properties(subset=cols_totais, **{'background-color': '#e8f4f8', 'font-weight': 'bold'}).map(colorir_negativos_texto), 
-            use_container_width=True
+            width='stretch'
         )
 
     st.divider()
@@ -682,7 +906,9 @@ if not df_raw_geral.empty:
     # 2. CONFERÊNCIA
     # ==========================================
     st.subheader("🔎 2. Conferência: Totais Mensais por Cartão")
-    filtro_tipo = st.radio("Selecione o tipo de conta:", ["Todos", "💳 Cartão", "Fixa"], horizontal=True)
+    st.markdown("💡 *Dica: Os valores ficam na cor **Vermelha** se a fatura aumentou em relação ao mês anterior, e **Verde** se diminuiu.*")
+    
+    filtro_tipo = st.radio("Selecione o tipo de conta para as tabelas de conferência e detalhamento:", ["Todos", "💳 Cartão", "Fixa"], horizontal=True)
     
     df_filtrado = df_base.copy()
     if filtro_tipo != "Todos": df_filtrado = df_filtrado[df_filtrado["Tipo_Despesa"] == filtro_tipo]
@@ -690,22 +916,25 @@ if not df_raw_geral.empty:
     tabela_conf = df_filtrado.pivot_table(index="Cartão_Icon", columns="Mes_Ano", values="Valor (R$)", aggfunc="sum").fillna(0)
     tabela_conf = tabela_conf.reindex(columns=[m for m in ordem_meses if m in tabela_conf.columns]).fillna(0)
     
-    novas_colunas = [f"📍 {col} (Atual)" if col == mes_atual_str else col for col in tabela_conf.columns]
+    novas_colunas = []
+    for col in tabela_conf.columns:
+        if col == mes_atual_str: novas_colunas.append(f"📍 {col} (Atual)")
+        else: novas_colunas.append(col)
     tabela_conf.columns = novas_colunas
     
     st.dataframe(
         tabela_conf.style.apply(estilizar_tendencia, axis=None).apply(destacar_mes, axis=0).format(fmt_br), 
-        use_container_width=True
+        width='stretch'
     )
     st.divider()
 
     # ==========================================
-    # 3. ACERTO MENSAL
+    # 3. ACERTO MENSAL (DETALHADO E ESTILIZADO)
     # ==========================================
     st.subheader("🤝 3. Acerto Mensal (Caixas Individuais)")
     col_mes_acerto, _ = st.columns([1, 3])
     with col_mes_acerto:
-        mes_acerto = st.selectbox("Selecione o mês:", ordem_meses, index=idx_mes_padrao, key="select_acerto")
+        mes_acerto = st.selectbox("Selecione o mês para o acerto:", ordem_meses, index=idx_mes_padrao, key="select_acerto")
 
     df_acerto = df_base[df_base["Mes_Ano"] == mes_acerto]
     sort_s_acerto = df_acerto["Sort_Data"].iloc[0] if not df_acerto.empty else "1900-01"
@@ -736,6 +965,7 @@ if not df_raw_geral.empty:
 
     saldo_parcial_paulo = (renda_paulo + pix_amanda) - desp_paulo
     saldo_final_paulo = saldo_parcial_paulo + extra_paulo
+
     saldo_parcial_amanda = renda_amanda - pix_amanda - desp_amanda
     saldo_final_amanda = saldo_parcial_amanda + extra_amanda
 
@@ -743,31 +973,62 @@ if not df_raw_geral.empty:
     with colP:
         with st.container(border=True):
             st.markdown("### 👦 Caixa Paulo")
-            st.markdown(f"**= Saldo Parcial:** {fmt_br(saldo_parcial_paulo)}")
-            st.markdown(f"#### Sobrou no Final: {fmt_br(saldo_final_paulo)} {'🔴' if saldo_final_paulo < 0 else '🟢'}")
+            st.markdown(f"""
+                <div style="line-height: 1.8;">
+                    <strong>(+) Rendas:</strong> {fmt_br(renda_paulo)}<br>
+                    <strong>(+) Pix Recebido da Amanda:</strong> {fmt_br(pix_amanda)}<br>
+                    <strong>(-) Contas Pagas:</strong> {fmt_br(desp_paulo)}
+                </div>
+            """, unsafe_allow_html=True)
+            st.divider()
+            st.markdown(f"""
+                <div style="line-height: 1.8;">
+                    <strong>= Saldo Parcial (Faltou/Sobrou):</strong> {fmt_br(saldo_parcial_paulo)}<br>
+                    <strong>(+) Dinheiro Extra (PLR, etc):</strong> {fmt_br(extra_paulo)}
+                </div>
+            """, unsafe_allow_html=True)
+            st.divider()
+            cor_saldo_p = "🔴" if saldo_final_paulo < 0 else "🟢"
+            st.markdown(f"#### Sobrou no Final: {fmt_br(saldo_final_paulo)} {cor_saldo_p}")
             
     with colA:
         with st.container(border=True):
             st.markdown("### 👩 Caixa Amanda")
-            st.markdown(f"**= Saldo Parcial:** {fmt_br(saldo_parcial_amanda)}")
-            st.markdown(f"#### Sobrou no Final: {fmt_br(saldo_final_amanda)} {'🔴' if saldo_final_amanda < 0 else '🟢'}")
+            st.markdown(f"""
+                <div style="line-height: 1.8;">
+                    <strong>(+) Rendas:</strong> {fmt_br(renda_amanda)}<br>
+                    <strong>(-) Pix Feito para o Paulo:</strong> {fmt_br(pix_amanda)}<br>
+                    <strong>(-) Contas Pagas:</strong> {fmt_br(desp_amanda)}
+                </div>
+            """, unsafe_allow_html=True)
+            st.divider()
+            st.markdown(f"""
+                <div style="line-height: 1.8;">
+                    <strong>= Saldo Parcial (Faltou/Sobrou):</strong> {fmt_br(saldo_parcial_amanda)}<br>
+                    <strong>(+) Dinheiro Extra (Bônus, etc):</strong> {fmt_br(extra_amanda)}
+                </div>
+            """, unsafe_allow_html=True)
+            st.divider()
+            cor_saldo_a = "🔴" if saldo_final_amanda < 0 else "🟢"
+            st.markdown(f"#### Sobrou no Final: {fmt_br(saldo_final_amanda)} {cor_saldo_a}")
 
     st.divider()
 
     # ==========================================
-    # 4 & 5. EVOLUÇÃO E RAIO-X
+    # 4 & 5. EVOLUÇÃO, RAIO-X E DETALHAMENTO (INTEGRADOS)
     # ==========================================
     col_tit_s4, col_rst_s4 = st.columns([5, 1])
     with col_tit_s4:
         st.subheader("📊 4. Evolução e Raio-X de Gastos")
     with col_rst_s4:
         st.write("")
-        if st.button("🔄 Restaurar", key="btn_reset_geral"):
+        if st.button("🔄 Restaurar Filtros", key="btn_reset_geral", help="Restaurar todos os filtros da análise"):
             for k in ["g4_cat", "shared_meses", "g4_tipo", "filtro_cartao", "shared_cat", "shared_tipo"]:
                 if k in st.session_state: del st.session_state[k]
             st.rerun()
     
     col_f1, col_f2, col_f3 = st.columns([1.5, 1.5, 1.2])
+    
     todas_categorias_disponiveis = sorted(df_filtrado["Categoria"].astype(str).unique().tolist())
     opcoes_cat_seletor = ["Todas as Categorias"] + todas_categorias_disponiveis
     tipos_op = ["Todos", "À Vista / Mês", "Parcelado"]
@@ -777,14 +1038,18 @@ if not df_raw_geral.empty:
         st.selectbox("Categoria:", options=opcoes_cat_seletor, index=idx_g4, key="g4_cat", on_change=update_cat_from_g4)
 
     with col_f2:
-        meses_selecionados = st.multiselect("Mês(es):", options=ordem_meses, key="shared_meses")
+        meses_selecionados = st.multiselect("Mês(es) (Vazio = Todos):", options=ordem_meses, key="shared_meses")
 
     with col_f3:
         idx_t4 = tipos_op.index(st.session_state["shared_tipo"]) if st.session_state["shared_tipo"] in tipos_op else 0
         st.selectbox("Tipo:", options=tipos_op, index=idx_t4, key="g4_tipo", on_change=update_tipo_from_g4)
 
-    df_meses_filtrados = df_filtrado.copy() if not meses_selecionados else df_filtrado[df_filtrado["Mes_Ano"].isin(meses_selecionados)]
-    label_meses_str = "Todos os Meses" if not meses_selecionados else ", ".join(meses_selecionados)
+    if not meses_selecionados:
+        df_meses_filtrados = df_filtrado.copy()
+        label_meses_str = "Todos os Meses"
+    else:
+        df_meses_filtrados = df_filtrado[df_filtrado["Mes_Ano"].isin(meses_selecionados)]
+        label_meses_str = ", ".join(meses_selecionados)
 
     df_analise = df_meses_filtrados.copy()
     if st.session_state["shared_cat"] != "Todas as Categorias":
@@ -798,68 +1063,161 @@ if not df_raw_geral.empty:
     if st.session_state["shared_tipo"] != "Todos":
         df_chart = df_chart[df_chart["Tipo_Compra"] == st.session_state["shared_tipo"]]
 
-    df_evolucao_mes = df_chart.groupby(["Sort_Data", "Mes_Ano"])["Valor (R$)"].sum().reset_index().sort_values("Sort_Data")
+    df_evolucao_mes = df_chart.groupby(["Sort_Data", "Mes_Ano"])["Valor (R$)"].sum().reset_index()
+    df_evolucao_mes = df_evolucao_mes.sort_values("Sort_Data")
 
     col_tabela, col_grafico = st.columns([1, 1.8])
     
     with col_tabela:
         st.markdown(f"**🏆 Ranking Consolidado ({label_meses_str})**")
-        df_ranking = df_meses_filtrados.copy()
         
+        df_ranking = df_meses_filtrados.copy()
+            
         if not df_ranking.empty:
             if st.session_state["shared_tipo"] != "Todos":
                 df_ranking = df_ranking[df_ranking["Tipo_Compra"] == st.session_state["shared_tipo"]]
 
-            df_ranking_pivot = df_ranking.pivot_table(index="Categoria", columns="Tipo_Compra", values="Valor (R$)", aggfunc="sum").fillna(0.0)
+            df_ranking_pivot = df_ranking.pivot_table(
+                index="Categoria", 
+                columns="Tipo_Compra", 
+                values="Valor (R$)", 
+                aggfunc="sum"
+            ).fillna(0.0)
+            
             for col_t in ["À Vista / Mês", "Parcelado"]:
-                if col_t not in df_ranking_pivot.columns: df_ranking_pivot[col_t] = 0.0
+                if col_t not in df_ranking_pivot.columns:
+                    df_ranking_pivot[col_t] = 0.0
                     
             df_ranking_pivot["Total"] = df_ranking_pivot["À Vista / Mês"] + df_ranking_pivot["Parcelado"]
             df_ranking_pivot = df_ranking_pivot.sort_values("Total", ascending=False).reset_index()
             
+            def destacar_categoria_ranking(row):
+                if st.session_state["shared_cat"] != "Todas as Categorias" and row["Categoria"] == st.session_state["shared_cat"]:
+                    return ['background-color: #fff3cd; font-weight: bold; color: #856404;'] * len(row)
+                return [''] * len(row)
+
+            altura_tabela = len(df_ranking_pivot) * 36 + 43
+
             st.dataframe(
-                df_ranking_pivot[["Categoria", "À Vista / Mês", "Parcelado", "Total"]].style.format({
-                    "À Vista / Mês": formatar_tabela_br, "Parcelado": formatar_tabela_br, "Total": formatar_tabela_br
+                df_ranking_pivot[["Categoria", "À Vista / Mês", "Parcelado", "Total"]].style.apply(destacar_categoria_ranking, axis=1).format({
+                    "À Vista / Mês": formatar_tabela_br, 
+                    "Parcelado": formatar_tabela_br, 
+                    "Total": formatar_tabela_br
                 }), 
-                hide_index=True, use_container_width=True
+                hide_index=True, 
+                width='stretch',
+                height=altura_tabela
             )
         else:
-            st.info("Nenhum dado para o período selecionado.")
+            st.info(f"Nenhum dado para o período selecionado.")
             
     with col_grafico:
-        st.markdown(f"**📈 Evolução**")
+        titulo_grafico = f"📈 Evolução ({st.session_state['shared_cat']})"
+        st.markdown(f"**{titulo_grafico}** - (🔴 Maior que o mês anterior)")
+        
         if not df_evolucao_mes.empty:
             meses_x = df_evolucao_mes["Mes_Ano"].tolist()
             valores_y = df_evolucao_mes["Valor (R$)"].tolist()
             
-            fig = go.Figure(data=[go.Bar(x=meses_x, y=valores_y, text=[fmt_br(v) for v in valores_y], textposition='outside')])
-            fig.update_layout(height=450, margin=dict(l=20, r=20, t=20, b=20))
-            st.plotly_chart(fig, use_container_width=True)
+            cores_barras = []
+            for i in range(len(valores_y)):
+                if i == 0:
+                    cores_barras.append('#1f77b4')
+                else:
+                    if valores_y[i] > valores_y[i-1]:
+                        cores_barras.append('#dc3545')
+                    else:
+                        cores_barras.append('#1f77b4')
+            
+            rotulos = [fmt_br(v) for v in valores_y]
+            
+            fig = go.Figure(data=[
+                go.Bar(
+                    x=meses_x, 
+                    y=valores_y, 
+                    text=rotulos,
+                    textposition='outside',
+                    textfont=dict(size=12, color='black'),
+                    cliponaxis=False,
+                    marker_color=cores_barras,
+                    hovertemplate='<b>Mês</b>: %{x}<br><b>Valor</b>: R$ %{y:,.2f}<extra></extra>'
+                )
+            ])
+            
+            max_y = max(valores_y) if valores_y else 0
+            
+            fig.update_layout(
+                height=450, 
+                margin=dict(l=20, r=20, t=20, b=20),
+                yaxis=dict(showgrid=True, zeroline=True, range=[0, max_y * 1.25])
+            )
+            
+            if len(meses_x) > 12:
+                try:
+                    idx_atual = meses_x.index(mes_atual_str)
+                except ValueError:
+                    idx_atual = len(meses_x) - 1
+                
+                end_idx = idx_atual + 3  
+                start_idx = end_idx - 12
+                
+                if start_idx < 0:
+                    start_idx = 0
+                    end_idx = min(12, len(meses_x))
+                if end_idx > len(meses_x):
+                    end_idx = len(meses_x)
+                    start_idx = max(0, len(meses_x) - 12)
+
+                fig.update_xaxes(
+                    tickangle=-45, 
+                    type='category', 
+                    range=[start_idx - 0.5, end_idx - 0.5]
+                )
+                fig.update_layout(dragmode='pan')
+                st.plotly_chart(fig, width='stretch')
+                st.caption("👈 *A visão foca no período atual. **Clique no gráfico e arraste para os lados** para ver o passado e as projeções futuras completas.*")
+            else:
+                fig.update_xaxes(tickangle=-45, type='category')
+                st.plotly_chart(fig, width='stretch')
+        else:
+            st.info(f"Nenhum dado registrado para a categoria selecionada.")
 
     # ==========================================
-    # DETALHAMENTO
+    # DETALHAMENTO POR DESPESA (Lupa Final)
     # ==========================================
     st.divider()
     st.subheader("📑 Detalhamento das Despesas Filtradas")
     
     col_cartao, col_tot, _ = st.columns([1.5, 1.5, 2])
+
     with col_cartao:
         lista_cartoes = ["Todos"] + sorted(df_analise["Cartão"].unique().tolist())
-        cartao_sel_s5 = st.selectbox("Filtrar por Cartão:", options=lista_cartoes, key="filtro_cartao")
+        cartao_sel_s5 = st.selectbox("Filtrar por Cartão / Débito:", options=lista_cartoes, key="filtro_cartao")
     
     df_detalhe = df_analise.copy()
-    if cartao_sel_s5 != "Todos": df_detalhe = df_detalhe[df_detalhe["Cartão"] == cartao_sel_s5]
+    if cartao_sel_s5 != "Todos": 
+        df_detalhe = df_detalhe[df_detalhe["Cartão"] == cartao_sel_s5]
     
     total_detalhe = df_detalhe["Valor (R$)"].sum() if not df_detalhe.empty else 0.0
     with col_tot:
-        st.metric(label="Total Detalhado", value=fmt_br(total_detalhe))
+        st.metric(label="Total Detalhado", value=f"R$ {total_detalhe:,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
     
     colunas_exibicao = ["Data", "Vencimento", "Mes_Ano", "Cartão_Icon", "Categoria", "Tipo_Compra", "Descrição", "Parcela", "Valor (R$)"]
     cols_finais = [c for c in colunas_exibicao if c in df_detalhe.columns]
     
+    def destacar_categoria_detalhe(row):
+        if st.session_state["shared_cat"] != "Todas as Categorias" and row["Categoria"] == st.session_state["shared_cat"]:
+            return ['background-color: #fff3cd; font-weight: 500;'] * len(row)
+        return [''] * len(row)
+
     if not df_detalhe.empty:
-        st.dataframe(df_detalhe.sort_values(["Sort_Data", "Vencimento"])[cols_finais].style.format({"Valor (R$)": formatar_tabela_br}), use_container_width=True, hide_index=True)
+        st.dataframe(
+            df_detalhe.sort_values(["Sort_Data", "Vencimento"])[cols_finais].style.apply(destacar_categoria_detalhe, axis=1).format({"Valor (R$)": formatar_tabela_br}), 
+            width='stretch', 
+            hide_index=True
+        )
     else:
         st.info("Nenhum dado encontrado para os filtros selecionados.")
+
 else:
     st.info("Nenhum dado encontrado.")
