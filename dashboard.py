@@ -1,4 +1,5 @@
 import streamlit as st
+from faturas import processar_faturas
 import pandas as pd
 import gspread
 import subprocess
@@ -469,15 +470,16 @@ if not df_raw_geral.empty:
     def update_cat_from_g4(): st.session_state["shared_cat"] = st.session_state["g4_cat"]
     def update_tipo_from_g4(): st.session_state["shared_tipo"] = st.session_state["g4_tipo"]
 
-    col_btn, _ = st.columns([1, 4])
+   col_btn, _ = st.columns([1, 4])
     with col_btn:
         if st.button("🔄 Atualizar Painel Financeiro", type="primary"):
             with st.spinner("Processando..."):
                 try:
-                    # Uso de python3 para compatibilidade garantida na nuvem
-                    subprocess.run(["python3", "faturas.py"], check=True)
-                except:
-                    pass
+                    # Chama a função do arquivo faturas.py de forma segura
+                    processar_faturas()
+                except Exception as e:
+                    st.error(f"Erro ao processar faturas: {e}")
+                
                 carregar_dados.clear()
                 carregar_despesas_brutas.clear()
                 preparar_base.clear()
