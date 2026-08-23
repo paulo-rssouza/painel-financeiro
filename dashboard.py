@@ -74,14 +74,20 @@ def parse_float(val):
 st.title("💰 Controle Financeiro Pro")
 st.write("Painel conectado com sucesso ao Google Sheets!")
 
-# Exemplo básico para testar se os dados da planilha estão carregando
 try:
-    dados = ws.get_all_records()
-    if dados:
-        df = pd.DataFrame(dados)
+    # Pega todos os valores em formato de lista pura para evitar o erro de cabeçalho duplicado
+    dados = ws.get_all_values()
+    
+    if len(dados) > 1:
+        df = pd.DataFrame(dados[1:], columns=dados[0])
+        
+        # Remove colunas vazias caso existam
+        df = df.loc[:, df.columns != '']
+        
         st.success(f"Planilha carregada com sucesso! Total de registros: {len(df)}")
         st.dataframe(df.head())
     else:
-        st.warning("A planilha está vazia ou os dados não puderam ser lidos no formato de tabela.")
+        st.warning("A planilha está vazia.")
+        
 except Exception as e:
     st.error(f"Erro ao ler os dados da planilha: {e}")
