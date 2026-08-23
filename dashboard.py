@@ -12,18 +12,14 @@ import time
 st.set_page_config(page_title="Controle Financeiro Pro", layout="wide")
 
 # ==========================================
-# CONTROLE DE AUTENTICAÇÃO (LOGIN ESTILIZADO)
+# ==========================================
+# CONTROLE DE AUTENTICAÇÃO (LOGIN COM BOTÃO)
 # ==========================================
 def check_password():
-    def password_entered():
-        if st.session_state["password"] == st.secrets["senha_app"]:
-            st.session_state["password_correct"] = True
-            del st.session_state["password"]
-        else:
-            st.session_state["password_correct"] = False
+    if "password_correct" not in st.session_state:
+        st.session_state["password_correct"] = False
 
-    if "password_correct" not in st.session_state or not st.session_state["password_correct"]:
-        # Criando colunas para centralizar a tela de login
+    if not st.session_state["password_correct"]:
         _, col_centro, _ = st.columns([1, 1.5, 1])
         
         with col_centro:
@@ -32,11 +28,18 @@ def check_password():
                 st.markdown("<h2 style='text-align: center;'>💸 Controle Financeiro</h2>", unsafe_allow_html=True)
                 st.markdown("<p style='text-align: center; color: #666;'>Digite sua senha para acessar o painel</p>", unsafe_allow_html=True)
                 
-                st.text_input("Senha de Acesso", type="password", on_change=password_entered, key="password")
-                
-                if "password_correct" in st.session_state and not st.session_state["password_correct"]:
-                    st.error("😕 Senha incorreta. Tente novamente.")
+                # Criando um formulário para o botão funcionar ao clicar ou apertar Enter
+                with st.form("form_login"):
+                    senha_digitada = st.text_input("Senha de Acesso", type="password")
+                    botao_entrar = st.form_submit_button("Entrar", use_container_width=True)
                     
+                    if botao_entrar:
+                        if senha_digitada == st.secrets["senha_app"]:
+                            st.session_state["password_correct"] = True
+                            st.rerun()
+                        else:
+                            st.error("😕 Senha incorreta. Tente novamente.")
+                            
         return False
     else:
         return True
