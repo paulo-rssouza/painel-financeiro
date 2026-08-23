@@ -30,9 +30,11 @@ st.markdown("""
 # ==========================================
 @st.cache_resource
 def get_ws():
-    cred = Credentials.from_service_account_file("credenciais.json", scopes=["https://www.googleapis.com/auth/spreadsheets"])
+    credentials_dict = dict(st.secrets["gcp_service_account"])
+    scope = ["https://www.googleapis.com/auth/spreadsheets"]
+    cred = Credentials.from_service_account_info(credentials_dict, scopes=scope)
     client = gspread.authorize(cred)
-    return client.open_by_url("https://docs.google.com/spreadsheets/d/1DosfnqIt8ioBxfXMrpEBT8Md7apgsdhvWg0YswUA-IA/edit")
+    return client.open_by_url("https://docs.google.com/spreadsheets/d/1Dosfnqi8ioBxFXMrpEBT8Md7apgsdhvwg0YswUA-IA/edit")
 
 ws = get_ws()
 
