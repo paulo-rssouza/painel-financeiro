@@ -8,12 +8,12 @@ from google.oauth2.service_account import Credentials
 import plotly.graph_objects as go
 import re
 import time
+import hmac
 
 st.set_page_config(page_title="Controle Financeiro Pro", layout="wide")
 
 # ==========================================
-# ==========================================
-# CONTROLE DE AUTENTICAÇÃO (LOGIN COM BOTÃO)
+# CONTROLE DE AUTENTICAÇÃO (LOGIN BLINDADO)
 # ==========================================
 def check_password():
     if "password_correct" not in st.session_state:
@@ -28,13 +28,13 @@ def check_password():
                 st.markdown("<h2 style='text-align: center;'>💸 Controle Financeiro</h2>", unsafe_allow_html=True)
                 st.markdown("<p style='text-align: center; color: #666;'>Digite sua senha para acessar o painel</p>", unsafe_allow_html=True)
                 
-                # Criando um formulário para o botão funcionar ao clicar ou apertar Enter
                 with st.form("form_login"):
                     senha_digitada = st.text_input("Senha de Acesso", type="password")
                     botao_entrar = st.form_submit_button("Entrar", use_container_width=True)
                     
                     if botao_entrar:
-                        if senha_digitada == st.secrets["senha_app"]:
+                        # Comparação segura contra Timing Attacks usando hmac
+                        if hmac.compare_digest(senha_digitada, st.secrets["senha_app"]):
                             st.session_state["password_correct"] = True
                             st.rerun()
                         else:
@@ -87,7 +87,8 @@ def get_ws():
     ]
     cred = Credentials.from_service_account_info(credentials_dict, scopes=scope)
     client = gspread.authorize(cred)
-    return client.open_by_url("https://docs.google.com/spreadsheets/d/1DosfnqIt8ioBxfXMrpEBT8Md7apgsdhvWg0YswUA-IA/edit")
+    # URL da planilha protegida via secrets
+    return client.open_by_url(st.secrets["spreadsheet_url"])
 
 ws = get_ws()
 
@@ -473,7 +474,8 @@ if not df_raw_geral.empty:
         if st.button("🔄 Atualizar Painel Financeiro", type="primary"):
             with st.spinner("Processando..."):
                 try:
-                    subprocess.run(["python", "faturas.py"], check=True)
+                    # Uso de python3 para compatibilidade garantida na nuvem
+                    subprocess.run(["python3", "faturas.py"], check=True)
                 except:
                     pass
                 carregar_dados.clear()
@@ -604,7 +606,7 @@ if not df_raw_geral.empty:
                             orig_idx = original_indices_desp[row_pos_int]
                             for col_name, new_val in col_changes.items():
                                 df_final_desp.at[orig_idx, col_name] = new_val
-                                
+                            
                     deleted_positions = changes.get("deleted_rows", [])
                     if deleted_positions:
                         indices_to_drop = [original_indices_desp[int(pos)] for pos in deleted_positions if int(pos) < len(original_indices_desp)]
@@ -798,7 +800,7 @@ if not df_raw_geral.empty:
                 def calc_peso_ordem(r):
                     m = str(r.get("Motivo do Alerta", "")).strip()
                     s = str(r.get("Status", "")).lower()
-                    if m != "": return 0  
+                    if m != "": return 0 
                     if "pendente" in s: return 1 
                     return 2
                 
