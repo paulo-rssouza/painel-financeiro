@@ -16,15 +16,36 @@ st.set_page_config(page_title="Controle Financeiro Pro", layout="wide")
 # ==========================================
 st.markdown("""
     <style>
+    /* Estilo padrão para Notebook / Desktop */
     div[data-testid="stDataFrame"] td, 
     div[data-testid="stDataFrame"] th {
         white-space: nowrap !important;
         padding-left: 14px !important;
         padding-right: 14px !important;
     }
+
+    /* Ajustes automáticos apenas para Celulares (telas menores que 768px) */
+    @media (max-width: 768px) {
+        div[data-testid="stDataFrame"] {
+            overflow-x: auto !important;
+        }
+        .block-container {
+            padding-left: 1rem !important;
+            padding-right: 1rem !important;
+            padding-top: 2rem !important;
+        }
+        h1 {
+            font-size: 1.8rem !important;
+        }
+        h2 {
+            font-size: 1.4rem !important;
+        }
+        h3 {
+            font-size: 1.2rem !important;
+        }
+    }
     </style>
 """, unsafe_allow_html=True)
-
 # ==========================================
 # CONEXÃO E FUNÇÕES DE APOIO
 # ==========================================
