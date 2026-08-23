@@ -12,22 +12,31 @@ import time
 st.set_page_config(page_title="Controle Financeiro Pro", layout="wide")
 
 # ==========================================
-# CONTROLE DE AUTENTICAÇÃO (LOGIN)
+# CONTROLE DE AUTENTICAÇÃO (LOGIN ESTILIZADO)
 # ==========================================
 def check_password():
     def password_entered():
         if st.session_state["password"] == st.secrets["senha_app"]:
             st.session_state["password_correct"] = True
-            del st.session_state["password"]  # Remove a senha da memória por segurança
+            del st.session_state["password"]
         else:
             st.session_state["password_correct"] = False
 
-    if "password_correct" not in st.session_state:
-        st.text_input("🔒 Digite a senha de acesso:", type="password", on_change=password_entered, key="password")
-        return False
-    elif not st.session_state["password_correct"]:
-        st.text_input("🔒 Digite a senha de acesso:", type="password", on_change=password_entered, key="password")
-        st.error("😕 Senha incorreta. Tente novamente.")
+    if "password_correct" not in st.session_state or not st.session_state["password_correct"]:
+        # Criando colunas para centralizar a tela de login
+        _, col_centro, _ = st.columns([1, 1.5, 1])
+        
+        with col_centro:
+            st.markdown("<br><br>", unsafe_allow_html=True)
+            with st.container(border=True):
+                st.markdown("<h2 style='text-align: center;'>💸 Controle Financeiro</h2>", unsafe_allow_html=True)
+                st.markdown("<p style='text-align: center; color: #666;'>Digite sua senha para acessar o painel</p>", unsafe_allow_html=True)
+                
+                st.text_input("Senha de Acesso", type="password", on_change=password_entered, key="password")
+                
+                if "password_correct" in st.session_state and not st.session_state["password_correct"]:
+                    st.error("😕 Senha incorreta. Tente novamente.")
+                    
         return False
     else:
         return True
