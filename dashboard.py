@@ -17,7 +17,10 @@ st.set_page_config(page_title="Controle Financeiro Pro", layout="wide")
 @st.cache_resource
 def get_ws():
     credentials_dict = dict(st.secrets["gcp_service_account"])
-    scope = ["https://www.googleapis.com/auth/spreadsheets"]
+    scope = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
     cred = Credentials.from_service_account_info(credentials_dict, scopes=scope)
     client = gspread.authorize(cred)
     # ATENÇÃO: Substitua abaixo pelo nome exato da sua planilha no Google Drive
