@@ -1,5 +1,4 @@
 import streamlit as st
-from faturas import processar_faturas
 import pandas as pd
 import gspread
 import subprocess
@@ -9,47 +8,11 @@ from google.oauth2.service_account import Credentials
 import plotly.graph_objects as go
 import re
 import time
-import hmac
 
 st.set_page_config(page_title="Controle Financeiro Pro", layout="wide")
 
 # ==========================================
-# CONTROLE DE AUTENTICAÇÃO (LOGIN BLINDADO)
-# ==========================================
-def check_password():
-    if "password_correct" not in st.session_state:
-        st.session_state["password_correct"] = False
-
-    if not st.session_state["password_correct"]:
-        _, col_centro, _ = st.columns([1, 1.5, 1])
-        
-        with col_centro:
-            st.markdown("<br><br>", unsafe_allow_html=True)
-            with st.container(border=True):
-                st.markdown("<h2 style='text-align: center;'>💸 Controle Financeiro</h2>", unsafe_allow_html=True)
-                st.markdown("<p style='text-align: center; color: #666;'>Digite sua senha para acessar o painel</p>", unsafe_allow_html=True)
-                
-                with st.form("form_login"):
-                    senha_digitada = st.text_input("Senha de Acesso", type="password")
-                    botao_entrar = st.form_submit_button("Entrar", use_container_width=True)
-                    
-                    if botao_entrar:
-                        # Comparação segura contra Timing Attacks usando hmac
-                        if hmac.compare_digest(senha_digitada, st.secrets["senha_app"]):
-                            st.session_state["password_correct"] = True
-                            st.rerun()
-                        else:
-                            st.error("😕 Senha incorreta. Tente novamente.")
-                            
-        return False
-    else:
-        return True
-
-if not check_password():
-    st.stop()
-
-# ==========================================
-# CSS GLOBAL (DESKTOP E MOBILE RESPONSIVO)
+# CSS GLOBAL
 # ==========================================
 st.markdown("""
     <style>
@@ -59,37 +22,17 @@ st.markdown("""
         padding-left: 14px !important;
         padding-right: 14px !important;
     }
-
-    @media (max-width: 768px) {
-        div[data-testid="stDataFrame"] {
-            overflow-x: auto !important;
-        }
-        .block-container {
-            padding-left: 1rem !important;
-            padding-right: 1rem !important;
-            padding-top: 2rem !important;
-        }
-        h1 { font-size: 1.8rem !important; }
-        h2 { font-size: 1.4rem !important; }
-        h3 { font-size: 1.2rem !important; }
-    }
     </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# CONEXÃO E FUNÇÕES DE APOIO
+# FUNÇÕES DE APOIO
 # ==========================================
 @st.cache_resource
 def get_ws():
-    credentials_dict = dict(st.secrets["gcp_service_account"])
-    scope = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ]
-    cred = Credentials.from_service_account_info(credentials_dict, scopes=scope)
+    cred = Credentials.from_service_account_file("credenciais.json", scopes=["https://www.googleapis.com/auth/spreadsheets"])
     client = gspread.authorize(cred)
-    # URL da planilha protegida via secrets
-    return client.open_by_url(st.secrets["spreadsheet_url"])
+    return client.open_by_url("https://docs.google.com/spreadsheets/d/1DosfnqIt8ioBxfXMrpEBT8Md7apgsdhvWg0YswUA-IA/edit")
 
 ws = get_ws()
 
@@ -214,6 +157,7 @@ def normalizar_chave(c, d, v):
 
 meses_pt = {1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril", 5: "Maio", 6: "Junho", 7: "Julho", 8: "Agosto", 9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"}
 
+# Função para ordenar cronologicamente os meses no formato DD/MM/YYYY
 def sort_data_br(d):
     try: return datetime.strptime(str(d).strip(), "%d/%m/%Y")
     except: return datetime(1900, 1, 1)
@@ -267,6 +211,7 @@ def carregar_dados():
             {"Palavras-chave (separadas por vírgula)": "vivo, conta vivo, enel, claro", "Categoria": "📄 Serviços e Contas"}
         ])
     
+    # --- NOVO: Carregar a lista de cartões inativos ---
     df_inativos = ler_aba("Cartoes_Inativos")
     if df_inativos.empty or "Cartão" not in df_inativos.columns:
         df_inativos = pd.DataFrame(columns=["Cartão"])
@@ -295,6 +240,7 @@ def carregar_dados():
         
     return df_despesas, ler_aba("Receitas_Extra"), ler_aba("Receitas_Historico"), ler_aba("Fixas"), df_rec_display, df_rec_total, df_reclass, df_inativos
 
+# Função isolada para a aba "Despesas"
 @st.cache_data(ttl=600)
 def carregar_despesas_brutas():
     return ler_aba("Despesas")
@@ -313,6 +259,9 @@ def processar_tabela_financeira(df_raw):
     df_s["Sort_Data"] = df_s[col_ma].apply(to_sort_date) if col_ma else "1900-01"
     return df_s.sort_values("Sort_Data")
 
+# ==========================================
+# MOTORES DE ALTA PERFORMANCE (CACHE)
+# ==========================================
 @st.cache_data
 def preparar_base(df_raw, df_reclass_raw):
     if df_raw is None or df_raw.empty: return pd.DataFrame()
@@ -470,16 +419,11 @@ if not df_raw_geral.empty:
     def update_cat_from_g4(): st.session_state["shared_cat"] = st.session_state["g4_cat"]
     def update_tipo_from_g4(): st.session_state["shared_tipo"] = st.session_state["g4_tipo"]
 
-   col_btn, _ = st.columns([1, 4])
+    col_btn, _ = st.columns([1, 4])
     with col_btn:
         if st.button("🔄 Atualizar Painel Financeiro", type="primary"):
             with st.spinner("Processando..."):
-                try:
-                    # Chama a função do arquivo faturas.py de forma segura
-                    processar_faturas()
-                except Exception as e:
-                    st.error(f"Erro ao processar faturas: {e}")
-                
+                subprocess.run(["python", "faturas.py"], check=True)
                 carregar_dados.clear()
                 carregar_despesas_brutas.clear()
                 preparar_base.clear()
@@ -497,13 +441,18 @@ if not df_raw_geral.empty:
             
             df_desp_bruto = carregar_despesas_brutas()
             
+            # --- RADAR DE FATURAS PENDENTES (DINÂMICO) ---
             st.markdown(f"#### 📡 Radar de Faturas (Mês Atual: {mes_atual_str})")
             
+            # Puxa todos os cartões que já existiram na planilha Despesas
             todos_cartoes = []
             if not df_desp_bruto.empty and "Cartão" in df_desp_bruto.columns:
                 todos_cartoes = sorted([c for c in df_desp_bruto["Cartão"].dropna().astype(str).str.strip().unique() if c])
             
+            # Puxa a lista de inativos salva na nova aba oculta
             inativos_atuais = df_inativos_raw["Cartão"].dropna().astype(str).str.strip().tolist() if not df_inativos_raw.empty else []
+            
+            # Filtra os oficiais que devem ser cobrados
             cartoes_ativos = [c for c in todos_cartoes if c not in inativos_atuais]
             
             cartoes_enviados = []
@@ -528,6 +477,7 @@ if not df_raw_geral.empty:
                     else:
                         st.warning("**⚠️ Nenhuma fatura foi lançada para este mês ainda.**")
             
+            # --- CONTROLE DE CARTÕES INATIVOS (KILL SWITCH) ---
             with st.expander("⚙️ Ocultar Cartões Cancelados / Inativos"):
                 st.markdown("Selecione os cartões do seu histórico que você não usa mais. Eles pararão de ser cobrados pelo Radar.")
                 valid_defaults = [c for c in inativos_atuais if c in todos_cartoes]
@@ -552,6 +502,7 @@ if not df_raw_geral.empty:
                     f_desp_cartao = st.selectbox("💳 Cartão:", lista_cartoes_bruto, key="f_desp_cartao")
                 
                 with col_f_desp2:
+                    # Filtra os vencimentos para mostrar apenas os do cartão selecionado
                     df_vencimentos = df_desp_bruto if f_desp_cartao == "Todos" else df_desp_bruto[df_desp_bruto["Cartão"] == f_desp_cartao]
                     vencimentos_unicos = df_vencimentos["Vencimento"].dropna().astype(str).unique().tolist()
                     lista_mes_bruto = ["Todos"] + sorted(vencimentos_unicos, key=sort_data_br)
@@ -571,6 +522,7 @@ if not df_raw_geral.empty:
                 df_display_desp = df_desp_bruto[mask_desp].copy()
                 original_indices_desp = df_display_desp.index.tolist()
                 
+                # --- SOMA DOS VALORES FILTRADOS ---
                 total_filtrado_desp = 0.0
                 if not df_display_desp.empty and "Valor (R$)" in df_display_desp.columns:
                     total_filtrado_desp = df_display_desp["Valor (R$)"].apply(parse_float).sum()
@@ -585,6 +537,7 @@ if not df_raw_geral.empty:
                     key="editor_despesas_brutas"
                 )
                 
+                # --- SISTEMA DE ALERTAS E VALIDAÇÕES ---
                 changes = st.session_state.get("editor_despesas_brutas", {})
                 num_added = len(changes.get("added_rows", []))
                 num_edited = len(changes.get("edited_rows", {}))
@@ -608,7 +561,7 @@ if not df_raw_geral.empty:
                             orig_idx = original_indices_desp[row_pos_int]
                             for col_name, new_val in col_changes.items():
                                 df_final_desp.at[orig_idx, col_name] = new_val
-                            
+                                
                     deleted_positions = changes.get("deleted_rows", [])
                     if deleted_positions:
                         indices_to_drop = [original_indices_desp[int(pos)] for pos in deleted_positions if int(pos) < len(original_indices_desp)]
@@ -624,7 +577,7 @@ if not df_raw_geral.empty:
                         df_final_desp = pd.concat([df_final_desp, df_new_desp], ignore_index=True)
                         
                     date_errors = []
-                    date_regex = re.compile(r'^\d{2}/\d{2}/\d{4}$')
+                    date_regex = re.compile(r'^\d{1,2}/\d{1,2}(/\d{4})?$')
                     for col in ["Data", "Vencimento"]:
                         if col in df_final_desp.columns:
                             invalid_mask = df_final_desp[col].astype(str).str.strip().apply(lambda x: x != "" and not bool(date_regex.match(x)))
@@ -663,7 +616,7 @@ if not df_raw_geral.empty:
                                 st.warning("⚠️ Nota: Pelo menos um dos lançamentos adicionados parece já existir na tabela (Mesma Data, Cartão e Descrição).")
                             
                             carregar_despesas_brutas.clear()
-                            time.sleep(2.0)
+                            time.sleep(4.0)
                             st.rerun()
             else:
                 st.warning("A aba 'Despesas' parece estar vazia no Google Sheets.")
@@ -802,7 +755,7 @@ if not df_raw_geral.empty:
                 def calc_peso_ordem(r):
                     m = str(r.get("Motivo do Alerta", "")).strip()
                     s = str(r.get("Status", "")).lower()
-                    if m != "": return 0 
+                    if m != "": return 0  
                     if "pendente" in s: return 1 
                     return 2
                 
@@ -969,7 +922,7 @@ if not df_raw_geral.empty:
     st.divider()
 
     # ==========================================
-    # 3. ACERTO MENSAL (DETALHADO E ESTILIZADO)
+    # 3. ACERTO MENSAL
     # ==========================================
     st.subheader("🤝 3. Acerto Mensal (Caixas Individuais)")
     col_mes_acerto, _ = st.columns([1, 3])
@@ -1145,7 +1098,7 @@ if not df_raw_geral.empty:
                     "Total": formatar_tabela_br
                 }), 
                 hide_index=True, 
-                width='stretch',
+                use_container_width=True,
                 height=altura_tabela
             )
         else:
@@ -1209,18 +1162,19 @@ if not df_raw_geral.empty:
                     start_idx = max(0, len(meses_x) - 12)
 
                 fig.update_xaxes(
-                    tickangle=-45, 
-                    type='category', 
+                    tickangle=-45,
+                    type='category',
                     range=[start_idx - 0.5, end_idx - 0.5]
                 )
                 fig.update_layout(dragmode='pan')
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig, use_container_width=True)
                 st.caption("👈 *A visão foca no período atual. **Clique no gráfico e arraste para os lados** para ver o passado e as projeções futuras completas.*")
             else:
                 fig.update_xaxes(tickangle=-45, type='category')
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig, use_container_width=True)
         else:
             st.info(f"Nenhum dado registrado para a categoria selecionada.")
+
 
     # ==========================================
     # DETALHAMENTO POR DESPESA (Lupa Final)
