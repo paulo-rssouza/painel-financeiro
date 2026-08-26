@@ -9,6 +9,43 @@ import plotly.graph_objects as go
 import re
 import time
 
+# --- SISTEMA DE LOGIN ---
+# Define o tempo máximo de inatividade (5 minutos = 300 segundos)
+TEMPO_LIMITE = 300 
+
+# Cria as variáveis de controle na primeira vez que abre
+if "logado" not in st.session_state:
+    st.session_state.logado = False
+    st.session_state.ultimo_acesso = time.time()
+
+# Se o usuário estiver logado, verifica se o tempo expirou
+if st.session_state.logado:
+    tempo_parado = time.time() - st.session_state.ultimo_acesso
+    
+    if tempo_parado > TEMPO_LIMITE:
+        # Se passou de 5 minutos, bloqueia e avisa
+        st.session_state.logado = False
+        st.warning("Sessão expirada por inatividade. Por segurança, faça o login novamente.")
+    else:
+        # Se ele mexeu antes de 5 minutos, zera o cronômetro!
+        st.session_state.ultimo_acesso = time.time()
+
+# Tela de bloqueio (se não estiver logado)
+if not st.session_state.logado:
+    st.title("🔒 Acesso Restrito")
+    senha_digitada = st.text_input("Digite a senha do painel", type="password")
+    
+    if st.button("Entrar"):
+        if senha_digitada == st.secrets["senha_painel"]:
+            st.session_state.logado = True
+            st.session_state.ultimo_acesso = time.time() # Começa a contar o tempo agora
+            st.rerun() # Reinicia a página para carregar o painel
+        else:
+            st.error("Senha incorreta!")
+            
+    st.stop() # Bloqueia a leitura do resto do código original abaixo
+# ------------------------
+
 st.set_page_config(page_title="Controle Financeiro Pro", layout="wide")
 
 # ==========================================
