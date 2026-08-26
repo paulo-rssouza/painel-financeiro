@@ -1,10 +1,11 @@
 import pandas as pd
 import gspread
 import re
+import streamlit as st
 from google.oauth2.service_account import Credentials
 
 # --- CONEXÃO ÚNICA ---
-cred = Credentials.from_service_account_file("credenciais.json", scopes=["https://www.googleapis.com/auth/spreadsheets"])
+cred = Credentials.from_service_account_info(st.secrets["gcp_service_account"], scopes=["https://www.googleapis.com/auth/spreadsheets"])
 ws = gspread.authorize(cred).open_by_url("https://docs.google.com/spreadsheets/d/1DosfnqIt8ioBxfXMrpEBT8Md7apgsdhvWg0YswUA-IA/edit")
 
 def tratar_valor(valor):
