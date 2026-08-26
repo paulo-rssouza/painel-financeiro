@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import gspread
 import subprocess
+import sys
 import numpy as np
 from datetime import datetime
 from google.oauth2.service_account import Credentials
@@ -460,7 +461,7 @@ if not df_raw_geral.empty:
     with col_btn:
         if st.button("🔄 Atualizar Painel Financeiro", type="primary"):
             with st.spinner("Processando..."):
-                subprocess.run(["python", "faturas.py"], check=True)
+                subprocess.run([sys.executable, "faturas.py"], check=True)
                 carregar_dados.clear()
                 carregar_despesas_brutas.clear()
                 preparar_base.clear()
