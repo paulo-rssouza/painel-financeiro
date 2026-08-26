@@ -885,9 +885,9 @@ if not df_raw_geral.empty:
                 column_config={"Grupo": st.column_config.TextColumn("Grupo (Ex: Dia 10 ou Dia 25)"), "Sort_Data": st.column_config.TextColumn("Filtro (Automático)", disabled=True), "Descrição": st.column_config.TextColumn("Descrição", width="large")}
             )
             if st.button("💾 Salvar Histórico de Extras"):
-                col_ma = "Mes_Ano" if "Mes_Ano" in df_extras_raw.columns else "Mês_Ano" if "Mês_Ano" in df_extras_raw.columns else None
-                if col_ma: df_extras_raw["Sort_Data"] = df_extras_raw[col_ma].apply(lambda ma: pd.to_datetime(ma, format="%m/%Y").strftime("%Y-%m") if pd.notna(ma) else "")
-                if salvar_tabela_google(df_extras_raw, "Receitas_Extra"): st.success("Salvo!"); carregar_dados.clear(); st.rerun()
+                col_ma = "Mes_Ano" if "Mes_Ano" in df_editado_extras.columns else "Mês_Ano" if "Mês_Ano" in df_editado_extras.columns else None
+                if col_ma: df_editado_extras["Sort_Data"] = df_editado_extras[col_ma].apply(lambda ma: pd.to_datetime(ma, format="%m/%Y").strftime("%Y-%m") if pd.notna(ma) else "")
+                if salvar_tabela_google(df_editado_extras, "Receitas_Extra"): st.success("Salvo!"); carregar_dados.clear(); st.rerun()
                 
         with tab5:
             st.markdown("### 🔀 Controle de Categorias (Crie, Edite ou Apague)")
