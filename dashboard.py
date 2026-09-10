@@ -201,6 +201,74 @@ def sort_data_br(d):
     except: return datetime(1900, 1, 1)
 
 # ==========================================
+# MÓDULO ISOLADO: OPERAÇÃO PORTUGAL
+# ==========================================
+modo_app = st.sidebar.radio("Navegação do Sistema", ["💸 Painel Financeiro", "✈️ Operação Portugal"])
+
+if modo_app == "✈️ Operação Portugal":
+    st.title("✈️ Operação Portugal — Checklist Atualizada")
+    st.markdown("Sua lista de tarefas para a viagem (30/11/2026). Adicione, edite ou exclua itens diretamente na tabela abaixo.")
+    
+    # Tenta ler a aba. Se não existir ou estiver vazia, cria a base inicial
+    df_checklist = ler_aba("Checklist_Portugal")
+    
+    if df_checklist.empty:
+        dados_iniciais = [
+            {"Tarefa": "Alugar o apartamento no Brasil", "Prioridade": "ALTA", "Status": "⏳ Pendente"},
+            {"Tarefa": "Confirmar com a Celina como funcionará o shipping da mudança", "Prioridade": "ALTA", "Status": "⏳ Pendente"},
+            {"Tarefa": "Definir quem será o procurador de vocês no Brasil", "Prioridade": "ALTA", "Status": "⏳ Pendente"},
+            {"Tarefa": "Ir ao cartório e fazer a procuração", "Prioridade": "ALTA", "Status": "⏳ Pendente"},
+            {"Tarefa": "Resolver o seguro necessário para o visto / plano B", "Prioridade": "ALTA", "Status": "⏳ Pendente"},
+            {"Tarefa": "Fazer pintura e manutenção do ap (Pintar, furos, mofo, vistoria)", "Prioridade": "ALTA", "Status": "⏳ Pendente"},
+            {"Tarefa": "Conferir a carteira de vacinação dos dois", "Prioridade": "MÉDIA/ALTA", "Status": "⏳ Pendente"},
+            {"Tarefa": "Paulo fazer os exames médicos", "Prioridade": "MÉDIA/ALTA", "Status": "⏳ Pendente"},
+            {"Tarefa": "Levantar todos os exames/check-ups necessários", "Prioridade": "MÉDIA/ALTA", "Status": "⏳ Pendente"},
+            {"Tarefa": "Fazer check-up no dentista", "Prioridade": "MÉDIA/ALTA", "Status": "⏳ Pendente"},
+            {"Tarefa": "Fazer exame com oftalmologista", "Prioridade": "MÉDIA/ALTA", "Status": "⏳ Pendente"},
+            {"Tarefa": "Comprar os óculos depois do exame", "Prioridade": "MÉDIA/ALTA", "Status": "⏳ Pendente"},
+            {"Tarefa": "Fazer triagem das roupas", "Prioridade": "MÉDIA/ALTA", "Status": "⏳ Pendente"},
+            {"Tarefa": "Lista de tudo que vamos levar para Portugal", "Prioridade": "MÉDIA/ALTA", "Status": "⏳ Pendente"},
+            {"Tarefa": "Definir o que vai nas malas x o que irá por shipping", "Prioridade": "MÉDIA/ALTA", "Status": "⏳ Pendente"},
+            {"Tarefa": "Separar e embalar memórias de viagem, quadros e decoração", "Prioridade": "MÉDIA/ALTA", "Status": "⏳ Pendente"},
+            {"Tarefa": "Fazer inventário dos bens que serão enviados", "Prioridade": "MÉDIA/ALTA", "Status": "⏳ Pendente"},
+            {"Tarefa": "Vender a TV (~R$ 6 mil) [Pesquisar, anunciar, ajustar preço]", "Prioridade": "MÉDIA", "Status": "⏳ Pendente"},
+            {"Tarefa": "Separar outras coisas para venda", "Prioridade": "MÉDIA", "Status": "⏳ Pendente"},
+            {"Tarefa": "Separar coisas para doação", "Prioridade": "MÉDIA", "Status": "⏳ Pendente"},
+            {"Tarefa": "Organizar o que ficará no Brasil", "Prioridade": "MÉDIA", "Status": "⏳ Pendente"},
+            {"Tarefa": "Definir transporte dos bens (após resposta da Celina)", "Prioridade": "MÉDIA", "Status": "⏳ Pendente"},
+            {"Tarefa": "Comprar as malas", "Prioridade": "MENOR", "Status": "⏳ Pendente"},
+            {"Tarefa": "Organizar e fechar as malas", "Prioridade": "MENOR", "Status": "⏳ Pendente"},
+            {"Tarefa": "Organização final do apartamento", "Prioridade": "MENOR", "Status": "⏳ Pendente"},
+            {"Tarefa": "Limpeza final antes da entrega", "Prioridade": "MENOR", "Status": "⏳ Pendente"}
+        ]
+        df_checklist = pd.DataFrame(dados_iniciais)
+        salvar_tabela_google(df_checklist, "Checklist_Portugal")
+    
+    # Editor da Tabela (Permite adicionar, excluir e editar)
+    df_editado_pt = st.data_editor(
+        df_checklist,
+        num_rows="dynamic",
+        use_container_width=True,
+        hide_index=True,
+        key="editor_portugal",
+        column_config={
+            "Status": st.column_config.SelectboxColumn("Status", options=["⏳ Pendente", "✅ Concluído", "❌ Cancelado"], required=True, width="medium"),
+            "Prioridade": st.column_config.SelectboxColumn("Prioridade", options=["ALTA", "MÉDIA/ALTA", "MÉDIA", "MENOR"], required=True, width="medium"),
+            "Tarefa": st.column_config.TextColumn("Descrição da Tarefa", width="large", required=True)
+        }
+    )
+    
+    if st.button("💾 Salvar Checklist no Google Sheets", type="primary"):
+        if salvar_tabela_google(df_editado_pt, "Checklist_Portugal"):
+            st.success("Lista salva com sucesso!")
+            st.cache_data.clear()
+            st.rerun()
+
+    # O SEGREDO DO ISOLAMENTO: O st.stop() mata a execução do código aqui.
+    # Nada do painel financeiro (abaixo) será lido ou processado se estivermos nesta tela!
+    st.stop()
+
+# ==========================================
 # CARREGAMENTO DE DADOS (CACHE: 10 MINUTOS)
 # ==========================================
 @st.cache_data(ttl=600)
