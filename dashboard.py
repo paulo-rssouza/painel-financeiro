@@ -217,9 +217,13 @@ if modo_app == "✈️ Operação Portugal":
         novas_colunas = ["Responsável", "Categoria", "Prazo"]
         for col in novas_colunas:
             if col not in df_checklist.columns:
-                df_checklist[col] = ""
+                df_checklist[col] = None # Alterado de "" para None para evitar conflito
                 
-        # --- ORDENAÇÃO INTELIGENTE: Pendentes/Alta prioridade sobem, Concluídos descem ---
+        # 🚨 CORREÇÃO DO ERRO DE TIPO: Força a coluna "Prazo" a ser uma Data (datetime)
+        if "Prazo" in df_checklist.columns:
+            df_checklist["Prazo"] = pd.to_datetime(df_checklist["Prazo"], errors="coerce").dt.date
+        
+        # --- ORDENAÇÃO INTELIGENTE ---
         peso_status = {"⏳ Pendente": 1, "✅ Concluído": 2, "❌ Cancelado": 3}
         peso_prio = {"ALTA": 1, "MÉDIA/ALTA": 2, "MÉDIA": 3, "MENOR": 4}
         
@@ -236,7 +240,7 @@ if modo_app == "✈️ Operação Portugal":
         with st.container(border=True):
             col_prog, col_metric = st.columns([3, 1])
             with col_prog:
-                st.write("") # Espaçamento
+                st.write("") 
                 st.progress(progresso, text=f"Progresso do Projeto: {int(progresso * 100)}%")
             with col_metric:
                 st.metric("Tarefas Concluídas", f"{concluidas} / {total_tarefas}")
@@ -244,8 +248,10 @@ if modo_app == "✈️ Operação Portugal":
     else:
         st.warning("Nenhuma tarefa encontrada. Adicione novas linhas abaixo.")
         df_checklist = pd.DataFrame(columns=["Tarefa", "Prioridade", "Status", "Responsável", "Categoria", "Prazo"])
+        # 🚨 Também garante que se a planilha estiver vazia, o tipo seja Data
+        df_checklist["Prazo"] = pd.to_datetime(df_checklist["Prazo"])
 
-    # 2. Editor Turbinado com as Novas Colunas
+    # 2. Editor Turbinado
     df_editado_pt = st.data_editor(
         df_checklist,
         num_rows="dynamic",
@@ -264,9 +270,9 @@ if modo_app == "✈️ Operação Portugal":
     
     # 3. Salvamento Blindado
     if st.button("💾 Salvar Checklist no Google Sheets", type="primary"):
-        # Tratamento rápido de data vazia antes de salvar no Google
         df_salvar = df_editado_pt.copy()
         if "Prazo" in df_salvar.columns:
+            # O Google Sheets não aceita 'NaT' (Not a Time), voltamos para vazio antes de salvar
             df_salvar["Prazo"] = df_salvar["Prazo"].astype(str).replace("NaT", "").replace("None", "")
 
         if salvar_tabela_google(df_salvar, "Checklist_Portugal"):
