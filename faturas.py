@@ -174,18 +174,25 @@ df_rec_aprovados = df_rec[df_rec["Status"] == "✅ Aprovado"].copy() if not df_r
 
 for nome_cartao, df_cartao in df_valid.groupby("Cartão"):
     ultima_data = df_cartao["Vencimento_dt"].max()
-    df_recente = df_cartao[df_cartao["Vencimento_dt"] == ultima_data]
-    mask_parc = df_recente["Parcela"].str.contains(r'\d+/\d+', na=False)
     
-    for _, linha in df_recente[mask_parc].iterrows():
-        p = str(linha["Parcela"]).split('/')
-        if int(p[0]) < int(p[1]):
-            for i in range(1, (int(p[1]) - int(p[0]) + 1)):
-                nova = linha.copy()
-                nova["Vencimento"] = (linha["Vencimento_dt"] + pd.DateOffset(months=i)).strftime("%d/%m/%Y")
-                nova["Parcela"] = f"{int(p[0])+i:02d}/{p[1]}"
-                lista_proj.append(nova.to_dict())
+    # 1. Projeção de Parceladas: Pega na última parcela registada de CADA compra específica
+    mask_parc = df_cartao["Parcela"].str.contains(r'\d+/\d+', na=False)
+    df_parceladas = df_cartao[mask_parc]
+    
+    if not df_parceladas.empty:
+        # Ordena por data e remove duplicados, mantendo apenas o último registo de cada compra
+        df_ultimas_parcelas = df_parceladas.sort_values("Vencimento_dt").drop_duplicates(subset=["Descrição", "Valor (R$)"], keep="last")
+        
+        for _, linha in df_ultimas_parcelas.iterrows():
+            p = str(linha["Parcela"]).split('/')
+            if int(p[0]) < int(p[1]):
+                for i in range(1, (int(p[1]) - int(p[0]) + 1)):
+                    nova = linha.copy()
+                    nova["Vencimento"] = (linha["Vencimento_dt"] + pd.DateOffset(months=i)).strftime("%d/%m/%Y")
+                    nova["Parcela"] = f"{int(p[0])+i:02d}/{p[1]}"
+                    lista_proj.append(nova.to_dict())
                 
+    # 2. Projeção de Recorrentes (Assinaturas Aprovadas)
     if not df_rec_aprovados.empty:
         aprovados_cartao = df_rec_aprovados[df_rec_aprovados["Cartão"] == nome_cartao]
         for _, linha_rec in aprovados_cartao.iterrows():
