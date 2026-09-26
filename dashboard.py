@@ -1000,9 +1000,9 @@ if not tabela_visual_geral.empty:
         )
 
     # --- NOVO: AUDITORIA DE DESPESAS TOTAIS ---
-    st.write("")
-    with st.expander("🔍 Ver composição das Despesas Totais (Auditoria detalhada da Visão Geral)"):
-        st.markdown("💡 *Esta tabela mostra exatamente quais linhas estão sendo somadas para chegar ao valor de 'Despesas Totais' no quadro acima.*")
+        st.write("")
+        with st.expander("🔍 Ver composição das Despesas Totais (Auditoria detalhada da Visão Geral)"):
+            st.markdown("💡 *Esta tabela mostra exatamente quais linhas estão sendo somadas para chegar ao valor de 'Despesas Totais' no quadro acima.*")
         
         col_aud1, col_aud2 = st.columns([1.5, 3.5])
         with col_aud1:
