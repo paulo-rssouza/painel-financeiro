@@ -992,12 +992,48 @@ if not df_raw_geral.empty:
         if isinstance(val, str) and "R$ -" in val: return 'color: #dc3545; font-weight: bold;'
         return ''
 
-    if not tabela_visual_geral.empty:
+if not tabela_visual_geral.empty:
         cols_totais = [col for col in tabela_visual_geral.columns if col[2] == 'Total Mensal']
         st.dataframe(
             tabela_visual_geral.style.apply(destacar_mes, axis=0).set_properties(subset=cols_totais, **{'background-color': '#e8f4f8', 'font-weight': 'bold'}).map(colorir_negativos_texto), 
             width='stretch'
         )
+
+    # --- NOVO: AUDITORIA DE DESPESAS TOTAIS ---
+    st.write("")
+    with st.expander("🔍 Ver composição das Despesas Totais (Auditoria detalhada da Visão Geral)"):
+        st.markdown("💡 *Esta tabela mostra exatamente quais linhas estão sendo somadas para chegar ao valor de 'Despesas Totais' no quadro acima.*")
+        
+        col_aud1, col_aud2 = st.columns([1.5, 3.5])
+        with col_aud1:
+            mes_auditoria = st.selectbox("Selecione o mês para detalhar:", ordem_meses, index=idx_mes_padrao, key="auditoria_mes")
+        
+        df_auditoria = df_base[df_base["Mes_Ano"] == mes_auditoria].copy()
+        
+        if not df_auditoria.empty:
+            soma_auditoria = df_auditoria["Valor (R$)"].sum()
+            soma_dia10 = df_auditoria[df_auditoria["Grupo"] == "Dia 10"]["Valor (R$)"].sum()
+            soma_dia25 = df_auditoria[df_auditoria["Grupo"] == "Dia 25"]["Valor (R$)"].sum()
+            
+            with col_aud2:
+                st.markdown(f"""
+                <div style="display: flex; gap: 20px; padding-top: 28px;">
+                    <div><strong>Soma Dia 10:</strong> {fmt_br(soma_dia10)}</div>
+                    <div><strong>Soma Dia 25:</strong> {fmt_br(soma_dia25)}</div>
+                    <div style="color: #dc3545;"><strong>Total do Mês: {fmt_br(soma_auditoria)}</strong></div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            cols_auditoria = ["Data", "Vencimento", "Grupo", "Cartão_Icon", "Categoria", "Descrição", "Parcela", "Valor (R$)"]
+            cols_disp_aud = [c for c in cols_auditoria if c in df_auditoria.columns]
+            
+            st.dataframe(
+                df_auditoria.sort_values(["Grupo", "Vencimento"])[cols_disp_aud].style.format({"Valor (R$)": formatar_tabela_br}),
+                width='stretch',
+                hide_index=True
+            )
+        else:
+            st.info("Nenhuma despesa registrada para este mês.")
 
     st.divider()
 
