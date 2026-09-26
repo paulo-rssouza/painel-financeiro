@@ -692,7 +692,7 @@ if not df_raw_geral.empty:
 
                     # 2. ALARME ORIGINAL: Agora ele só apita se a data estiver bizarra
                     date_errors = []
-                    date_regex = re.compile(r'^\d{2}/\d{2}/\d{4}$')
+                    date_regex = re.compile(r'^\d{1,2}/\d{1,2}/\d{4}$')
                     for col in ["Data", "Vencimento"]:
                         if col in df_final_desp.columns:
                             invalid_mask = df_final_desp[col].astype(str).str.strip().apply(lambda x: x != "" and not bool(date_regex.match(x)))
