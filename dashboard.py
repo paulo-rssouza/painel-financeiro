@@ -682,8 +682,17 @@ if not df_raw_geral.empty:
                         df_new_desp = df_new_desp[df_final_desp.columns]
                         df_final_desp = pd.concat([df_final_desp, df_new_desp], ignore_index=True)
                         
+                    # 1. MÁGICA AQUI: Arruma as datas curtas adicionando o ano automaticamente
+                    ano_atual_str = str(datetime.now().year)
+                    for col in ["Data", "Vencimento"]:
+                        if col in df_final_desp.columns:
+                            df_final_desp[col] = df_final_desp[col].astype(str).str.strip().apply(
+                                lambda x: f"{x}/{ano_atual_str}" if len(x) <= 5 and x.count("/") == 1 else x
+                            )
+
+                    # 2. ALARME ORIGINAL: Agora ele só apita se a data estiver bizarra
                     date_errors = []
-                    date_regex = re.compile(r'^\d{1,2}/\d{1,2}(/\d{4})?$')
+                    date_regex = re.compile(r'^\d{2}/\d{2}/\d{4}$')
                     for col in ["Data", "Vencimento"]:
                         if col in df_final_desp.columns:
                             invalid_mask = df_final_desp[col].astype(str).str.strip().apply(lambda x: x != "" and not bool(date_regex.match(x)))
@@ -992,7 +1001,7 @@ if not df_raw_geral.empty:
         if isinstance(val, str) and "R$ -" in val: return 'color: #dc3545; font-weight: bold;'
         return ''
 
-if not tabela_visual_geral.empty:
+    if not tabela_visual_geral.empty:
         cols_totais = [col for col in tabela_visual_geral.columns if col[2] == 'Total Mensal']
         st.dataframe(
             tabela_visual_geral.style.apply(destacar_mes, axis=0).set_properties(subset=cols_totais, **{'background-color': '#e8f4f8', 'font-weight': 'bold'}).map(colorir_negativos_texto), 
@@ -1000,9 +1009,9 @@ if not tabela_visual_geral.empty:
         )
 
     # --- NOVO: AUDITORIA DE DESPESAS TOTAIS ---
-        st.write("")
-        with st.expander("🔍 Ver composição das Despesas Totais (Auditoria detalhada da Visão Geral)"):
-            st.markdown("💡 *Esta tabela mostra exatamente quais linhas estão sendo somadas para chegar ao valor de 'Despesas Totais' no quadro acima.*")
+    st.write("")
+    with st.expander("🔍 Ver composição das Despesas Totais (Auditoria detalhada da Visão Geral)"):
+        st.markdown("💡 *Esta tabela mostra exatamente quais linhas estão sendo somadas para chegar ao valor de 'Despesas Totais' no quadro acima.*")
         
         col_aud1, col_aud2 = st.columns([1.5, 3.5])
         with col_aud1:
