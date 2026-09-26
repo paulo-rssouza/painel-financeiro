@@ -171,6 +171,10 @@ if not df_rec.empty:
 # =========================================================================================
 lista_proj = []
 df_rec_aprovados = df_rec[df_rec["Status"] == "✅ Aprovado"].copy() if not df_rec.empty else pd.DataFrame()
+mes_atual_real = pd.Timestamp.now().strftime("%Y-%m")
+
+# CORREÇÃO: Cria a coluna na base oficial antes de iniciar o agrupamento
+df_valid["Mes_Ano"] = df_valid["Vencimento_dt"].dt.strftime("%Y-%m")
 
 for nome_cartao, df_cartao in df_valid.groupby("Cartão"):
     ultima_data = df_cartao["Vencimento_dt"].max()
